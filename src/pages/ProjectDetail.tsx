@@ -101,10 +101,10 @@ const ProjectDetail = () => {
           <div className="space-y-4 md:space-y-6 animate-fade-in">
             {/* Title + short description */}
             <header className="space-y-2 md:space-y-3">
-              <div className="relative">
-                <Link to="/" className="absolute right-full mr-4 top-1/2 -translate-y-1/2 inline-flex items-center gap-2 text-sm md:text-base text-muted-foreground hover:text-primary smooth whitespace-nowrap">
-                  <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" /> Back to projects
-                </Link>
+              <Link to="/" className="inline-flex items-center gap-2 text-sm md:text-base text-muted-foreground hover:text-primary smooth whitespace-nowrap">
+                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" /> Back to projects
+              </Link>
+              <div>
                 <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold">
                   <span className="gradient-text">{project.title}</span>
                 </h1>
