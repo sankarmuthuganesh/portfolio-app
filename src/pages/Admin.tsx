@@ -20,9 +20,10 @@ import {
   upsertProject,
   DEFAULT_PROFILE,
 } from "@/lib/portfolio";
+import { fetchVisits, clearAllVisits, VisitRow } from "@/lib/supabase";
 import defaultProfileImg from "@/assets/profile.jpg";
 import { toast } from "sonner";
-import { Edit, Plus, Trash2, X, Upload, ArrowLeft, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Edit, Plus, Trash2, X, Upload, ArrowLeft, Image as ImageIcon, Loader2, Smartphone, Tablet, Monitor, RefreshCw, Eye } from "lucide-react";
 import { SkillIcon } from "@/components/SkillIcon";
 
 const empty = (): Project => ({
@@ -270,6 +271,7 @@ const Admin = () => {
               <TabsList>
                 <TabsTrigger value="projects">Projects</TabsTrigger>
                 <TabsTrigger value="profile">Profile</TabsTrigger>
+                <TabsTrigger value="visits">Visits</TabsTrigger>
               </TabsList>
             </div>
 
@@ -422,9 +424,189 @@ const Admin = () => {
                 </div>
               </div>
             </TabsContent>
+
+            <TabsContent value="visits" className="space-y-4">
+              <VisitsPanel />
+            </TabsContent>
           </Tabs>
         )}
       </main>
+    </div>
+  );
+};
+
+/* ── Visits / Audit panel ── */
+const DeviceIcon = ({ type }: { type: string }) => {
+  if (type === "mobile") return <Smartphone className="w-4 h-4 text-primary" />;
+  if (type === "tablet") return <Tablet className="w-4 h-4 text-primary" />;
+  return <Monitor className="w-4 h-4 text-primary" />;
+};
+
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+const VisitsPanel = () => {
+  const [visits, setVisits] = useState<VisitRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setVisits(await fetchVisits(500));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleClear = async () => {
+    if (!confirm("Delete ALL visit logs? This cannot be undone.")) return;
+    setClearing(true);
+    try {
+      const ok = await clearAllVisits();
+      if (ok) {
+        toast.success("All visit logs cleared");
+        await load();
+      } else {
+        toast.error("Failed to clear visits");
+      }
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  // Stats
+  const total = visits.length;
+  const uniqueVisitors = new Set(visits.map((v) => v.visitor_id || "")).size;
+  const byDevice = visits.reduce<Record<string, number>>((acc, v) => {
+    acc[v.device_type] = (acc[v.device_type] || 0) + 1;
+    return acc;
+  }, {});
+  const topPages = Object.entries(
+    visits.reduce<Record<string, number>>((acc, v) => {
+      acc[v.page_name] = (acc[v.page_name] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-4">
+      {/* Header actions */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Showing the most recent {visits.length} visits
+        </p>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClear}
+            disabled={clearing || visits.length === 0}
+          >
+            <Trash2 className="w-4 h-4 mr-1 text-destructive" />
+            Clear all
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="glass rounded-2xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Total visits</p>
+          <p className="text-2xl font-bold gradient-text">{total}</p>
+        </div>
+        <div className="glass rounded-2xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Unique visitors</p>
+          <p className="text-2xl font-bold gradient-text">{uniqueVisitors}</p>
+        </div>
+        <div className="glass rounded-2xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Mobile</p>
+          <p className="text-2xl font-bold">
+            {byDevice.mobile || 0}
+            <span className="text-sm text-muted-foreground ml-1">
+              / {byDevice.tablet || 0} / {byDevice.desktop || 0}
+            </span>
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">mobile / tablet / desktop</p>
+        </div>
+        <div className="glass rounded-2xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Top page</p>
+          <p className="text-base font-semibold truncate">
+            {topPages[0]?.[0] || "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {topPages[0]?.[1] ? `${topPages[0][1]} views` : ""}
+          </p>
+        </div>
+      </div>
+
+      {/* Top pages */}
+      {topPages.length > 0 && (
+        <div className="glass rounded-2xl p-4">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Eye className="w-4 h-4 text-primary" /> Top pages
+          </h3>
+          <div className="space-y-2">
+            {topPages.map(([name, count]) => (
+              <div key={name} className="flex items-center justify-between text-sm">
+                <span className="truncate">{name}</span>
+                <span className="text-muted-foreground ml-2 shrink-0">{count} views</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Visits list */}
+      <div className="glass rounded-2xl overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+            Loading visits…
+          </div>
+        ) : visits.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">
+            No visits yet. Once people start viewing your portfolio, you'll see entries here.
+          </div>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {visits.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 p-3 text-sm">
+                <DeviceIcon type={v.device_type} />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{v.page_name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{v.device_type}</p>
+                </div>
+                <p className="text-xs text-muted-foreground shrink-0">
+                  {formatTime(v.visited_at)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

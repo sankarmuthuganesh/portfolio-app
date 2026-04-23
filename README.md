@@ -16,14 +16,6 @@ For your goals:
 - **good India latency**
 
 
-git init
-git add .
-git commit -m "Portfolio Project"
-git branch -M main
-git remote add origin https://github.com/sankarmuthuganesh/portfolio.git
-git push -u origin main
-
-
 the recommended setup is:
 
 - **Frontend hosting:** Cloudflare Pages

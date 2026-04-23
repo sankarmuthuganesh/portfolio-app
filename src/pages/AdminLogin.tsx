@@ -5,17 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAdmin, isAdmin } from "@/lib/portfolio";
+import { cleanupAdminVisits } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
+
 const AdminLogin = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Redirect if already logged in
     isAdmin().then((loggedIn) => {
       if (loggedIn) navigate("/admin");
     });
@@ -25,15 +26,22 @@ const AdminLogin = () => {
     e.preventDefault();
     if (loading) return;
 
-    if (!email.trim() || !password) {
-      toast.error("Please enter email and password");
+    if (!password) {
+      toast.error("Please enter password");
+      return;
+    }
+
+    if (!ADMIN_EMAIL) {
+      toast.error("Admin email not configured (VITE_ADMIN_EMAIL)");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await loginAdmin(email.trim(), password);
+      const result = await loginAdmin(ADMIN_EMAIL, password);
       if (result.success) {
+        // Remove any visit rows logged from this browser before login
+        cleanupAdminVisits().catch(() => {});
         toast.success("Welcome back!");
         navigate("/admin");
       } else {
@@ -54,18 +62,7 @@ const AdminLogin = () => {
               <Lock className="w-6 h-6 text-primary-foreground" />
             </div>
             <h1 className="text-2xl font-bold">Admin Access</h1>
-            <p className="text-sm text-muted-foreground">Sign in to manage your portfolio</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoFocus
-              autoComplete="email"
-            />
+            <p className="text-sm text-muted-foreground">Enter password to manage your portfolio</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
@@ -74,6 +71,7 @@ const AdminLogin = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoFocus
               autoComplete="current-password"
             />
           </div>

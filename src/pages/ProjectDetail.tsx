@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getProject, Project } from "@/lib/portfolio";
+import { logVisit } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar, ImageIcon, User } from "lucide-react";
 
@@ -47,7 +48,11 @@ const ProjectDetail = () => {
     // getProject checks in-memory cache first → instant if coming from Index
     getProject(id).then((p) => {
       setProject(p);
-      if (p) document.title = `${p.title} — Portfolio`;
+      if (p) {
+        document.title = `${p.title} — Portfolio`;
+        // Audit project visit using its title (skipped for admins)
+        logVisit(p.title);
+      }
       setLoading(false);
     });
   }, [id]);

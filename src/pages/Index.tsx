@@ -5,6 +5,7 @@ import { SkillIcon } from "@/components/SkillIcon";
 import { ArrowUpRight, ImageIcon, Mail, Phone } from "lucide-react";
 import defaultProfileImg from "@/assets/profile.jpg";
 import { getProjects, getProfile, Project, ProfileData, DEFAULT_PROFILE } from "@/lib/portfolio";
+import { logVisit } from "@/lib/supabase";
 
 /* ── Skeleton placeholders ── */
 const SkeletonCard = () => (
@@ -50,6 +51,8 @@ const Index = () => {
       setProfile(prof);
       setLoading(false);
     });
+    // Audit homepage visit (skipped automatically for admins)
+    logVisit("Home");
   }, []);
 
   useEffect(() => {
