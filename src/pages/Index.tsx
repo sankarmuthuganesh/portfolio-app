@@ -141,18 +141,18 @@ const Index = () => {
                   )}
 
                   {profile.skills.length > 0 && (
-                    <div className="mt-3 pt-3 md:mt-4 md:pt-4 border-t border-border/60">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-primary mb-1.5">Skills</p>
-                      <div className="grid grid-cols-2 gap-1.5">
+                    <div className="mt-3 pt-3 md:mt-4 md:pt-4 border-t border-border/60 w-full">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-primary mb-2.5">Skills</p>
+                      <div className="flex flex-wrap gap-2">
                         {profile.skills.map((skill) => (
                           <div
                             key={skill.name}
-                            className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/60 px-2 py-1.5 smooth hover:bg-primary/15 hover:border-primary/40"
+                            className="group flex items-center gap-2 rounded-full border border-border/50 bg-background/60 backdrop-blur-sm px-3 py-1.5 smooth hover:border-primary/50 hover:bg-primary/10 hover:shadow-[0_0_12px_0px_hsl(var(--primary)/0.15)]"
                           >
-                            <span className="shrink-0 flex items-center justify-center w-4 h-4">
-                              <SkillIcon icon={skill.icon} name={skill.name} className="w-4 h-4" />
+                            <span className="shrink-0 flex items-center justify-center w-3.5 h-3.5 opacity-80 group-hover:opacity-100">
+                              <SkillIcon icon={skill.icon} name={skill.name} className="w-3.5 h-3.5" />
                             </span>
-                            <span className="text-xs font-medium truncate">{skill.name}</span>
+                            <span className="text-[11px] font-medium text-foreground/80 group-hover:text-foreground smooth">{skill.name}</span>
                           </div>
                         ))}
                       </div>
