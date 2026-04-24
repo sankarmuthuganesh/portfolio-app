@@ -26,7 +26,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/myportfolio">
         <Suspense fallback={null}>
           <Routes>
             <Route path="/" element={<Index />} />
