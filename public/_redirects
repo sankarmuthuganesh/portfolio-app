@@ -1,2 +1,4 @@
+/root.html     /     301
+/root          /     301
 /             /root.html     200
 /myportfolio/*    /index.html    200
