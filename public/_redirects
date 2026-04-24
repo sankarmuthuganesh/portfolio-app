@@ -1,2 +1,1 @@
-/myportfolio/:file.:ext  /myportfolio/:file.:ext  200
-/myportfolio/*             /index.html                200
+/myportfolio/*    /index.html    200
