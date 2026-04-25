@@ -10,16 +10,26 @@ import { toast } from "sonner";
 import { Lock } from "lucide-react";
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
+const BASE = import.meta.env.VITE_APP_BASENAME || "/myportfolio";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [attempts, setAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
+
   useEffect(() => {
     isAdmin().then((loggedIn) => {
-      if (loggedIn) navigate("/admin");
+      if (loggedIn) navigate(`${BASE}/admin`);
     });
+    // Prevent search engines from indexing admin pages
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => { document.head.removeChild(meta); };
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,16 +46,32 @@ const AdminLogin = () => {
       return;
     }
 
+    // Rate limiting: lock after 5 failed attempts for 60 seconds
+    const now = Date.now();
+    if (lockedUntil > now) {
+      const secs = Math.ceil((lockedUntil - now) / 1000);
+      toast.error(`Too many attempts. Try again in ${secs}s`);
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await loginAdmin(ADMIN_EMAIL, password);
       if (result.success) {
+        setAttempts(0);
         // Remove any visit rows logged from this browser before login
         cleanupAdminVisits().catch(() => {});
         toast.success("Welcome back!");
-        navigate("/admin");
+        navigate(`${BASE}/admin`);
       } else {
-        toast.error(result.error || "Login failed");
+        const newAttempts = attempts + 1;
+        setAttempts(newAttempts);
+        if (newAttempts >= 5) {
+          setLockedUntil(Date.now() + 60_000);
+          toast.error("Too many failed attempts. Locked for 60 seconds.");
+        } else {
+          toast.error(result.error || "Login failed");
+        }
       }
     } finally {
       setLoading(false);

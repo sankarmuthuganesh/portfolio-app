@@ -6,6 +6,8 @@ import { logVisit } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar, ImageIcon, User } from "lucide-react";
 
+const BASE = import.meta.env.VITE_APP_BASENAME || "/myportfolio";
+
 /* ── Skeleton ── */
 const SkeletonDetail = () => (
   <div className="container py-6 md:py-8 lg:py-10 max-w-6xl animate-pulse">
@@ -49,7 +51,7 @@ const ProjectDetail = () => {
     getProject(id).then((p) => {
       setProject(p);
       if (p) {
-        document.title = `${p.title} — Portfolio`;
+        document.title = `${p.title} — ${import.meta.env.VITE_APP_NAME || "Portfolio"}`;
         // Audit project visit using its title (skipped for admins)
         logVisit(p.title);
       }
@@ -65,6 +67,38 @@ const ProjectDetail = () => {
     }, 6000);
     return () => clearInterval(timer);
   }, [project]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key) {
+        case "ArrowRight":
+        case "ArrowDown":
+          e.preventDefault();
+          if (project && project.images.length > 1) {
+            setActiveImg((prev) => (prev + 1) % project.images.length);
+          }
+          break;
+        case "ArrowLeft":
+        case "ArrowUp":
+          e.preventDefault();
+          if (project && project.images.length > 1) {
+            setActiveImg((prev) => (prev - 1 + project.images.length) % project.images.length);
+          }
+          break;
+        case "Escape":
+        case "Backspace":
+          e.preventDefault();
+          navigate(BASE);
+          break;
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [project, navigate]);
 
   if (loading) {
     return (
@@ -85,7 +119,7 @@ const ProjectDetail = () => {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-4">
             <h1 className="text-2xl md:text-3xl font-bold">Project not found</h1>
-            <Button onClick={() => navigate("/")}>Back home</Button>
+            <Button onClick={() => navigate(BASE)}>Back home</Button>
           </div>
         </div>
       </div>
@@ -101,7 +135,7 @@ const ProjectDetail = () => {
           <div className="space-y-4 md:space-y-6 animate-fade-in">
             {/* Title + short description */}
             <header className="space-y-2 md:space-y-3">
-              <Link to="/" className="inline-flex items-center gap-2 text-sm md:text-base text-muted-foreground hover:text-primary smooth whitespace-nowrap">
+              <Link to={BASE} className="inline-flex items-center gap-2 text-sm md:text-base text-muted-foreground hover:text-primary smooth whitespace-nowrap">
                 <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" /> Back to projects
               </Link>
               <div>

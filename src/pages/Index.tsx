@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SkillIcon } from "@/components/SkillIcon";
-import { ArrowUpRight, ImageIcon, Mail, Phone } from "lucide-react";
+import { ArrowUpRight, ArrowUpDown, ImageIcon, Mail, Phone } from "lucide-react";
 import defaultProfileImg from "@/assets/profile.jpg";
-import { getProjects, getProfile, Project, ProfileData, DEFAULT_PROFILE } from "@/lib/portfolio";
+import { getProjects, getProfile, getCachedSync, isAdmin, onAuthStateChange, Project, ProfileData, DEFAULT_PROFILE } from "@/lib/portfolio";
 import { logVisit } from "@/lib/supabase";
+
+const BASE = import.meta.env.VITE_APP_BASENAME || "/myportfolio";
 
 /* ── Skeleton placeholders ── */
 const SkeletonCard = () => (
@@ -40,20 +42,40 @@ const SkeletonProfile = () => (
 );
 
 const Index = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  // Read cache at render time (not module level) so it reflects invalidations
+  const initProjects = getCachedSync<Project[]>("projects");
+  const initProfile = getCachedSync<ProfileData>("profile");
+  const hasCache = !!initProjects && !!initProfile;
+
+  const [projects, setProjects] = useState<Project[]>(initProjects || []);
+  const [profile, setProfile] = useState<ProfileData>(initProfile || DEFAULT_PROFILE);
+  const [loading, setLoading] = useState(!hasCache);
+  const [sortMode, setSortMode] = useState<"custom" | "added" | "added-rev" | "alpha" | "alpha-rev">("added");
+  const [sortInitialized, setSortInitialized] = useState(false);
+  const [admin, setAdmin] = useState(false);
 
   useEffect(() => {
-    // On mount: use prefetch for first load, fresh fetch for subsequent visits
+    isAdmin().then(setAdmin);
+    const unsub = onAuthStateChange(setAdmin);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    // Always fetch fresh data (uses dedup so it's cheap if already in-flight)
     Promise.all([getProjects(), getProfile()]).then(([p, prof]) => {
       setProjects(p);
       setProfile(prof);
       setLoading(false);
+      // Set default sort based on whether admin has configured custom order
+      if (!sortInitialized) {
+        const hasCustom = p.some((proj) => proj.displayOrder > 0);
+        if (hasCustom) setSortMode("custom");
+        setSortInitialized(true);
+      }
     });
-    // Audit homepage visit (skipped automatically for admins)
     logVisit("Home");
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!profile.name) return;
@@ -69,11 +91,72 @@ const Index = () => {
     }
   }, [profile]);
 
+  const sortedProjects = useMemo(() => [...projects].sort((a, b) => {
+    switch (sortMode) {
+      case "custom":
+        return a.displayOrder - b.displayOrder;
+      case "added":
+        return a.createdAt - b.createdAt; // first added first
+      case "added-rev":
+        return b.createdAt - a.createdAt; // last added first
+      case "alpha":
+        return a.title.localeCompare(b.title);
+      case "alpha-rev":
+        return b.title.localeCompare(a.title);
+      default:
+        return 0;
+    }
+  }), [projects, sortMode]);
+
+  const cycleSortMode = useCallback(() => {
+    setSortMode((prev) => {
+      const modes: typeof sortMode[] = ["custom", "added", "added-rev", "alpha", "alpha-rev"];
+      const idx = modes.indexOf(prev);
+      return modes[(idx + 1) % modes.length];
+    });
+  }, []);
+
+  const sortLabel = {
+    custom: "Custom order",
+    added: "First added",
+    "added-rev": "Last added",
+    alpha: "A → Z",
+    "alpha-rev": "Z → A",
+  }[sortMode];
+
   const photoSrc = profile.photo || defaultProfileImg;
 
   const prefetchDetail = useCallback(() => {
     import("./ProjectDetail.tsx");
   }, []);
+
+  // Keyboard shortcuts for Index page
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (!admin) return;
+      // 'a' → go to admin
+      if (e.key === "a" && !e.metaKey && !e.ctrlKey) {
+        navigate(`${BASE}/admin/login`);
+        return;
+      }
+      // 's' → cycle sort mode
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
+        cycleSortMode();
+        return;
+      }
+      // '1'-'9' → open project by index (uses current sort order)
+      if (e.key >= "1" && e.key <= "9" && !e.metaKey && !e.ctrlKey) {
+        const idx = parseInt(e.key) - 1;
+        if (sortedProjects[idx]) {
+          navigate(`${BASE}/project/${sortedProjects[idx].id}`);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [sortedProjects, navigate]);
 
   return (
     <div className="h-[100dvh] bg-background hero-bg relative flex flex-col overflow-hidden">
@@ -169,7 +252,19 @@ const Index = () => {
                   Featured <span className="gradient-text">Projects</span>
                 </h2>
                 {!loading && (
-                  <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">{projects.length} project{projects.length === 1 ? "" : "s"}</p>
+                  <div className="flex items-center gap-3">
+                    {admin && (
+                      <button
+                        onClick={cycleSortMode}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary smooth px-2 py-1 rounded-md hover:bg-primary/10"
+                        title="Change sort order"
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">{sortLabel}</span>
+                      </button>
+                    )}
+                    <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">{projects.length} project{projects.length === 1 ? "" : "s"}</p>
+                  </div>
                 )}
               </div>
 
@@ -185,15 +280,14 @@ const Index = () => {
                     <div className="p-8 md:p-12 text-center text-muted-foreground">No projects yet.</div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4 pb-2 items-start">
-                      {projects.map((p, i) => {
+                      {sortedProjects.map((p, i) => {
                         const cover = p.images[0];
                         return (
                           <Link
                             key={p.id}
-                            to={`/project/${p.id}`}
+                            to={`${BASE}/project/${p.id}`}
                             onMouseEnter={prefetchDetail}
-                            className="group glass rounded-2xl overflow-hidden smooth hover:scale-[1.02] hover:border-primary/60 card-shadow block animate-fade-in"
-                            style={{ animationDelay: `${i * 60}ms` }}
+                            className="group glass rounded-2xl overflow-hidden smooth hover:scale-[1.02] hover:border-primary/60 card-shadow block"
                           >
                             <div className="aspect-[16/10] relative overflow-hidden bg-muted">
                               {cover ? (

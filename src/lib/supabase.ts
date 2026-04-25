@@ -11,14 +11,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "");
 
-// Inject preconnect link at runtime for faster subsequent fetches
-if (supabaseUrl && typeof document !== "undefined") {
-  const link = document.createElement("link");
-  link.rel = "preconnect";
-  link.href = supabaseUrl;
-  link.crossOrigin = "anonymous";
-  document.head.appendChild(link);
-}
+// Preconnect is handled in index.html via %VITE_SUPABASE_URL%
 
 // =============================================================
 // Visit auditing

@@ -9,6 +9,7 @@ export type Project = {
   timeline: string;
   images: string[];
   createdAt: number;
+  displayOrder: number;
 };
 
 export type Skill = { name: string; icon: string };
@@ -95,6 +96,17 @@ function setCache(key: string, data: unknown) {
   cache.set(key, { data, ts: Date.now() });
 }
 
+/** Check if a cache key has valid data (not expired) */
+export function hasCached(key: string): boolean {
+  const entry = cache.get(key);
+  return !!entry && Date.now() - entry.ts < CACHE_TTL;
+}
+
+/** Get cached data synchronously (returns null if not cached or expired) */
+export function getCachedSync<T>(key: string): T | null {
+  return getCached<T>(key);
+}
+
 export function invalidateCache(key?: string) {
   if (key) {
     cache.delete(key);
@@ -139,6 +151,7 @@ function mapRow(row: Record<string, unknown>): Project {
     timeline: (row.timeline as string) || "",
     images: (row.images as string[]) || [],
     createdAt: (row.created_at as number) || Date.now(),
+    displayOrder: (row.display_order as number) ?? 0,
   };
 }
 
@@ -147,6 +160,7 @@ export function getProjects(): Promise<Project[]> {
     const { data, error } = await supabase
       .from("projects")
       .select("*")
+      .order("display_order", { ascending: true })
       .order("created_at", { ascending: false });
     if (error) {
       console.error("Failed to fetch projects:", error.message);
@@ -190,10 +204,26 @@ export async function upsertProject(project: Project): Promise<void> {
     timeline: project.timeline,
     images: project.images,
     created_at: project.createdAt,
+    display_order: project.displayOrder ?? 0,
   });
   if (error) {
     console.error("Failed to save project:", error.message);
     throw new Error(error.message);
+  }
+}
+
+/** Batch-update display_order for all projects */
+export async function saveProjectOrder(projects: { id: string; displayOrder: number }[]): Promise<void> {
+  invalidateCache("projects");
+  // Update each project's display_order
+  const promises = projects.map((p) =>
+    supabase.from("projects").update({ display_order: p.displayOrder }).eq("id", p.id)
+  );
+  const results = await Promise.all(promises);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) {
+    console.error("Failed to save project order:", failed.error.message);
+    throw new Error(failed.error.message);
   }
 }
 
@@ -355,6 +385,3 @@ export function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-// Backwards-compat exports
-export const SKILLS = DEFAULT_SKILLS;
-export const PROFILE = DEFAULT_PROFILE;

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
@@ -26,13 +26,16 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Sonner />
-      <BrowserRouter basename="/myportfolio">
+      <BrowserRouter>
         <Suspense fallback={null}>
           <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/project/:id" element={<ProjectDetail />} />
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={<Admin />} />
+            {/* Root redirects to portfolio basename (URL changes) */}
+            <Route path="/" element={<Navigate to={import.meta.env.VITE_APP_BASENAME || "/myportfolio"} replace />} />
+            {/* Portfolio home */}
+            <Route path={import.meta.env.VITE_APP_BASENAME || "/myportfolio"} element={<Index />} />
+            <Route path={`${import.meta.env.VITE_APP_BASENAME || "/myportfolio"}/project/:id`} element={<ProjectDetail />} />
+            <Route path={`${import.meta.env.VITE_APP_BASENAME || "/myportfolio"}/admin/login`} element={<AdminLogin />} />
+            <Route path={`${import.meta.env.VITE_APP_BASENAME || "/myportfolio"}/admin`} element={<Admin />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

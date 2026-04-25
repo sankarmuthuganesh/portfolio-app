@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,17 @@ import {
   saveProfile,
   Skill,
   upsertProject,
+  saveProjectOrder,
+  invalidateCache,
   DEFAULT_PROFILE,
 } from "@/lib/portfolio";
 import { fetchVisits, clearAllVisits, VisitRow } from "@/lib/supabase";
 import defaultProfileImg from "@/assets/profile.jpg";
 import { toast } from "sonner";
-import { Edit, Plus, Trash2, X, Upload, ArrowLeft, Image as ImageIcon, Loader2, Smartphone, Tablet, Monitor, RefreshCw, Eye } from "lucide-react";
+import { Edit, Plus, Trash2, X, Upload, ArrowLeft, GripVertical, Image as ImageIcon, Loader2, Smartphone, Tablet, Monitor, RefreshCw, Eye } from "lucide-react";
 import { SkillIcon } from "@/components/SkillIcon";
+
+const BASE = import.meta.env.VITE_APP_BASENAME || "/myportfolio";
 
 const empty = (): Project => ({
   id: crypto.randomUUID(),
@@ -35,6 +39,7 @@ const empty = (): Project => ({
   timeline: "",
   images: [],
   createdAt: Date.now(),
+  displayOrder: 0,
 });
 
 const Admin = () => {
@@ -45,13 +50,20 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [reordering, setReordering] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const projectsListRef = useRef<HTMLDivElement>(null);
+  const autoScrollTimer = useRef<number | null>(null);
+  const touchStartY = useRef<number>(0);
+  const touchCurrentIdx = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function init() {
       const loggedIn = await isAdmin();
       if (!loggedIn) {
-        navigate("/admin/login");
+        navigate(`${BASE}/admin/login`);
         return;
       }
       const [p, prof] = await Promise.all([getProjects(), getProfile()]);
@@ -61,16 +73,155 @@ const Admin = () => {
       setLoading(false);
     }
     init();
-    document.title = "Admin — Portfolio";
-    return () => { cancelled = true; };
+    document.title = `Admin — ${import.meta.env.VITE_APP_NAME || "Portfolio"}`;
+    // Prevent search engines from indexing admin pages
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    // Keyboard shortcut: Escape to go home
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "Escape") navigate(BASE);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      cancelled = true;
+      document.head.removeChild(meta);
+      window.removeEventListener("keydown", handleKey);
+    };
   }, [navigate]);
 
   const handleLogout = async () => {
     await logoutAdmin();
-    navigate("/admin/login");
+    navigate(`${BASE}/admin/login`);
   };
 
-  const refresh = async () => setProjects(await getProjects());
+  const refresh = async () => {
+    invalidateCache("projects");
+    setProjects(await getProjects());
+  };
+
+  // --- Auto-scroll helper ---
+  const autoScroll = (clientY: number) => {
+    const container = projectsListRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const edgeZone = 60;
+    const scrollSpeed = 12;
+    if (clientY < rect.top + edgeZone) {
+      container.scrollBy({ top: -scrollSpeed });
+    } else if (clientY > rect.bottom - edgeZone) {
+      container.scrollBy({ top: scrollSpeed });
+    }
+  };
+
+  // --- Find which project index is at a given Y coordinate ---
+  const getIndexAtY = (clientY: number): number | null => {
+    const container = projectsListRef.current;
+    if (!container) return null;
+    const children = Array.from(container.children) as HTMLElement[];
+    for (let i = 0; i < children.length; i++) {
+      const rect = children[i].getBoundingClientRect();
+      if (clientY >= rect.top && clientY <= rect.bottom) return i;
+    }
+    // If above first or below last, clamp
+    if (children.length > 0) {
+      const firstRect = children[0].getBoundingClientRect();
+      if (clientY < firstRect.top) return 0;
+      const lastRect = children[children.length - 1].getBoundingClientRect();
+      if (clientY > lastRect.bottom) return children.length - 1;
+    }
+    return null;
+  };
+
+  // --- Complete a reorder (shared by drag and touch) ---
+  const completeReorder = async (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    const reordered = [...projects];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    const updated = reordered.map((p, i) => ({ ...p, displayOrder: i }));
+    setProjects(updated);
+    setReordering(true);
+    try {
+      await saveProjectOrder(updated.map((p) => ({ id: p.id, displayOrder: p.displayOrder })));
+      toast.success("Order saved");
+    } catch {
+      toast.error("Failed to save order");
+      await refresh();
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  // --- Desktop drag handlers ---
+  const handleDragStart = (index: number) => {
+    setDragIdx(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIdx(index);
+    autoScroll(e.clientY);
+  };
+
+  const handleDrop = async (dropIndex: number) => {
+    if (dragIdx === null) {
+      setDragIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    setDragIdx(null);
+    setDragOverIdx(null);
+    await completeReorder(dragIdx, dropIndex);
+  };
+
+  const handleDragEnd = () => {
+    setDragIdx(null);
+    setDragOverIdx(null);
+    if (autoScrollTimer.current) {
+      cancelAnimationFrame(autoScrollTimer.current);
+      autoScrollTimer.current = null;
+    }
+  };
+
+  // --- Touch handlers (mobile/tablet) ---
+  // Use ref-based listener for touchmove with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const container = projectsListRef.current;
+    if (!container) return;
+
+    const onTouchMove = (e: TouchEvent) => {
+      // Only intercept if we're actively dragging
+      if (dragIdx === null) return;
+      e.preventDefault(); // prevent page scroll while reordering
+      const clientY = e.touches[0].clientY;
+      autoScroll(clientY);
+      const overIdx = getIndexAtY(clientY);
+      if (overIdx !== null) setDragOverIdx(overIdx);
+    };
+
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => container.removeEventListener("touchmove", onTouchMove);
+  }, [dragIdx]);
+
+  const handleTouchStart = (index: number, e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchCurrentIdx.current = index;
+    setDragIdx(index);
+  };
+
+  const handleTouchEnd = async () => {
+    const fromIdx = dragIdx;
+    const toIdx = dragOverIdx;
+    setDragIdx(null);
+    setDragOverIdx(null);
+    touchCurrentIdx.current = null;
+    if (fromIdx !== null && toIdx !== null) {
+      await completeReorder(fromIdx, toIdx);
+    }
+  };
 
   const handleSave = async () => {
     if (!editing || saving) return;
@@ -285,20 +436,35 @@ const Admin = () => {
                 </Button>
               </div>
 
-              <div className="space-y-3">
+              <div ref={projectsListRef} className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 [scrollbar-width:thin]">
                 {projects.length === 0 && (
                   <p className="text-center text-muted-foreground py-12">No projects yet — create your first one.</p>
                 )}
-                {projects.map((p) => (
-                  <div key={p.id} className="glass rounded-2xl p-4 flex items-center gap-4 smooth hover:border-primary/60">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-muted shrink-0 hero-bg">
+                {projects.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={() => handleDrop(idx)}
+                    onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handleTouchStart(idx, e)}
+                    onTouchEnd={handleTouchEnd}
+                    className={`glass rounded-2xl p-3 md:p-4 flex items-center gap-3 md:gap-4 smooth hover:border-primary/60 cursor-grab active:cursor-grabbing select-none touch-none ${
+                      dragIdx === idx ? "opacity-50 scale-95" : ""
+                    } ${dragOverIdx === idx && dragIdx !== idx ? "border-primary ring-2 ring-primary/30" : ""}`}
+                  >
+                    <div className="shrink-0 text-muted-foreground hover:text-primary smooth" title="Drag to reorder">
+                      <GripVertical className="w-5 h-5" />
+                    </div>
+                    <div className="w-12 h-12 md:w-16 md:h-16 rounded-lg md:rounded-xl overflow-hidden bg-muted shrink-0 hero-bg">
                       {p.images[0] && <img src={p.images[0]} alt={p.title} className="w-full h-full object-cover" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold truncate">{p.title}</h3>
-                      <p className="text-sm text-muted-foreground truncate">{p.shortDescription}</p>
+                      <h3 className="font-semibold truncate text-sm md:text-base">{p.title}</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground truncate">{p.shortDescription}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-0.5 md:gap-1 shrink-0">
                       <Button size="icon" variant="ghost" onClick={() => setEditing(p)}>
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -403,7 +569,7 @@ const Admin = () => {
                           </span>
                           <input
                             type="file"
-                            accept="image/svg+xml,image/png,image/jpeg,image/webp"
+                            accept="image/png,image/jpeg,image/webp"
                             className="hidden"
                             onChange={(e) => handleSkillIconUpload(i, e.target.files?.[0])}
                           />

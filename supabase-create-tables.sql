@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS public.projects (
   role TEXT DEFAULT '',
   timeline TEXT DEFAULT '',
   images JSONB DEFAULT '[]'::jsonb,
-  created_at BIGINT DEFAULT (extract(epoch from now()) * 1000)::bigint
+  created_at BIGINT DEFAULT (extract(epoch from now()) * 1000)::bigint,
+  display_order INTEGER DEFAULT 0
 );
 
 -- Profile table (single row, id = 1)
