@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SkillIcon } from "@/components/SkillIcon";
 import { ArrowUpRight, ArrowUpDown, ImageIcon, Mail, Phone } from "lucide-react";
 import defaultProfileImg from "@/assets/profile.jpg";
-import { getProjects, getProfile, getCachedSync, isAdmin, onAuthStateChange, Project, ProfileData, DEFAULT_PROFILE } from "@/lib/portfolio";
+import { getProjects, getProfile, getCachedSync, isAdmin, isAdminSync, onAuthStateChange, Project, ProfileData, DEFAULT_PROFILE } from "@/lib/portfolio";
 import { logVisit } from "@/lib/supabase";
 
 const BASE = import.meta.env.VITE_APP_BASENAME || "/myportfolio";
@@ -41,6 +41,7 @@ const SkeletonProfile = () => (
   </div>
 );
 
+
 const Index = () => {
   const navigate = useNavigate();
   // Read cache at render time (not module level) so it reflects invalidations
@@ -53,7 +54,7 @@ const Index = () => {
   const [loading, setLoading] = useState(!hasCache);
   const [sortMode, setSortMode] = useState<"custom" | "added" | "added-rev" | "alpha" | "alpha-rev">("added");
   const [sortInitialized, setSortInitialized] = useState(false);
-  const [admin, setAdmin] = useState(false);
+  const [admin, setAdmin] = useState(isAdminSync);
 
   useEffect(() => {
     isAdmin().then(setAdmin);
@@ -287,7 +288,7 @@ const Index = () => {
                             key={p.id}
                             to={`${BASE}/project/${p.id}`}
                             onMouseEnter={prefetchDetail}
-                            className="group glass rounded-2xl overflow-hidden smooth hover:scale-[1.02] hover:border-primary/60 card-shadow block"
+                            className="group glass rounded-2xl overflow-hidden smooth hover:scale-[1.02] hover:border-primary/60 card-shadow block [content-visibility:auto] [contain-intrinsic-size:auto_300px]"
                           >
                             <div className="aspect-[16/10] relative overflow-hidden bg-muted">
                               {cover ? (
@@ -296,7 +297,7 @@ const Index = () => {
                                   alt={p.title}
                                   width={640}
                                   height={400}
-                                  loading={i < 3 ? "eager" : "lazy"}
+                                  loading="lazy"
                                   decoding="async"
                                   className="w-full h-full object-cover smooth group-hover:scale-110"
                                 />
