@@ -68,6 +68,21 @@ const ProjectDetail = () => {
     return () => clearInterval(timer);
   }, [project]);
 
+  // Prefetch adjacent images for instant carousel transitions
+  useEffect(() => {
+    if (!project || project.images.length <= 1) return;
+    const toPrefetch = [
+      project.images[(activeImg + 1) % project.images.length],
+      project.images[(activeImg - 1 + project.images.length) % project.images.length],
+    ];
+    toPrefetch.forEach((src) => {
+      if (src) {
+        const img = new Image();
+        img.src = src;
+      }
+    });
+  }, [activeImg, project]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -157,6 +172,8 @@ const ProjectDetail = () => {
                         src={project.images[activeImg]}
                         alt={`${project.title} screenshot ${activeImg + 1}`}
                         decoding="async"
+                        // @ts-expect-error fetchpriority not yet in React types
+                        fetchpriority="high"
                         className="w-full h-full object-cover"
                       />
                     </div>

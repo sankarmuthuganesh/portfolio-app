@@ -74,8 +74,9 @@ const Index = () => {
         if (hasCustom) setSortMode("custom");
         setSortInitialized(true);
       }
+      // Defer analytics to avoid competing with data fetch for bandwidth
+      logVisit("Home");
     });
-    logVisit("Home");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -131,6 +132,32 @@ const Index = () => {
     import("./ProjectDetail.tsx");
   }, []);
 
+  // Background prefetch: after initial paint, silently cache all cover images
+  useEffect(() => {
+    if (loading || !projects.length) return;
+    const id = typeof requestIdleCallback === "function"
+      ? requestIdleCallback(() => {
+      projects.forEach((p) => {
+        if (p.images[0]) {
+          const img = new Image();
+          img.src = p.images[0];
+        }
+      });
+        })
+      : (setTimeout(() => {
+          projects.forEach((p) => {
+            if (p.images[0]) {
+              const img = new Image();
+              img.src = p.images[0];
+            }
+          });
+        }, 200) as unknown as number);
+    return () => {
+      if (typeof cancelIdleCallback === "function") cancelIdleCallback(id);
+      else clearTimeout(id);
+    };
+  }, [loading, projects]);
+
   // Keyboard shortcuts for Index page
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -157,7 +184,7 @@ const Index = () => {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [sortedProjects, navigate]);
+  }, [sortedProjects, navigate, cycleSortMode]);
 
   return (
     <div className="h-[100dvh] bg-background hero-bg relative flex flex-col overflow-hidden">
@@ -188,6 +215,8 @@ const Index = () => {
                           width={96}
                           height={96}
                           decoding="async"
+                          // @ts-expect-error fetchpriority not yet in React types
+                          fetchpriority="high"
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -288,7 +317,7 @@ const Index = () => {
                             key={p.id}
                             to={`${BASE}/project/${p.id}`}
                             onMouseEnter={prefetchDetail}
-                            className="group glass rounded-2xl overflow-hidden smooth hover:scale-[1.02] hover:border-primary/60 card-shadow block [content-visibility:auto] [contain-intrinsic-size:auto_300px]"
+                            className="group glass rounded-2xl overflow-hidden smooth hover:scale-[1.02] hover:border-primary/60 card-shadow block [content-visibility:auto] [contain-intrinsic-size:auto]"
                           >
                             <div className="aspect-[16/10] relative overflow-hidden bg-muted">
                               {cover ? (
