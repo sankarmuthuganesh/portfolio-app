@@ -328,7 +328,7 @@ const Index = () => {
                                   height={400}
                                   loading="lazy"
                                   decoding="async"
-                                  className="w-full h-full object-cover smooth group-hover:scale-110"
+                                  className="w-full h-full object-contain smooth group-hover:scale-110"
                                 />
                               ) : (
                                 <div className="w-full h-full hero-bg flex items-center justify-center">

@@ -174,7 +174,7 @@ const ProjectDetail = () => {
                         decoding="async"
                         // @ts-expect-error fetchpriority not yet in React types
                         fetchpriority="high"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     </div>
                     {project.images.length > 1 && (
